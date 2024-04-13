@@ -1,0 +1,88 @@
+name: uboot build
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ARCH: "arm64"
+  CROSS_COMPILE: "/usr/bin/aarch64-linux-gnu-"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu openssh-client libncurses-dev flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf bc uuid-dev libgnutls28-dev wget device-tree-compiler
+
+      - name: Clone Repo
+        run: git clone https://github.com/chiragp-mecha/u-boot.git
+
+      - name: Build u-boot
+        working-directory: ./u-boot
+        run: make mecha_comet_defconfig && make -j$(nproc)
+
+      - name: Download and checkout to the ARM Trusted Firmware repo
+        run: |
+          git clone https://github.com/nxp-imx/imx-atf
+          cd imx-atf
+          git checkout 99195a23d3aef485fb8f10939583b1bdef18881c
+
+      - name: Build ARM Trusted Firmware
+        working-directory: ./imx-atf
+        run: make PLAT=imx8mm bl31
+
+      - name: Download the LPDDR4 training binaries
+        run: |
+          mkdir -p firmware-imx
+          cd firmware-imx
+          wget https://www.nxp.com/lgfiles/NMG/MAD/YOCTO/firmware-imx-8.20.bin
+          chmod +x firmware-imx-8.20.bin
+          yes | ./firmware-imx-8.20.bin | more +700
+
+      - name: Download imx-mkimage and build the boot image
+        run: |
+          git clone https://github.com/nxp-imx/imx-mkimage
+          cd imx-mkimage
+          git checkout d489494622585a47b4be88988595b0e4f9598f39
+
+      - name: Make the boot image
+        working-directory: ./imx-mkimage
+        run: |
+          cp ../u-boot/spl/u-boot-spl.bin iMX8M/
+          cp ../u-boot/u-boot-nodtb.bin iMX8M/
+          cp ../u-boot/arch/arm/dts/mecha-comet.dtb iMX8M/
+          cp ../u-boot/tools/mkimage iMX8M/mkimage_uboot
+          cp ../firmware-imx/firmware-imx-8.20/firmware/ddr/synopsys/lpddr4_pmu_train_* iMX8M/
+          cp ../imx-atf/build/imx8mm/release/bl31.bin iMX8M/
+          cp iMX8M/mecha-comet.dtb iMX8M/mecha-comet-evk.dtb
+          make SOC=iMX8MM PLAT=mecha-comet flash_evk
+
+      - name: Tar the boot image
+        run: tar czvf flash.tar.gz ./imx-mkimage/iMX8M/flash.bin
+
+      - name: Upload tar file
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./flash.tar.gz
+
+  release:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    needs: build
+    steps:
+      - name: Download flash.bin
+        uses: actions/download-artifact@v4
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./artifact/*
+          # token: ${{ secrets.RELEASE_TOKEN }}
+          tag_name: "v1.0.${{ github.run_number }}"
