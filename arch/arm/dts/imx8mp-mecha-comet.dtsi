@@ -44,6 +44,24 @@
 		};
 	};
 
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		key-volume-up {
+			label = "Volume Up";
+			linux,input-type = <EV_KEY>;
+			linux,code = <KEY_VOLUMEUP>;
+			gpios = <&gpio2 07 GPIO_ACTIVE_LOW>;
+		};
+
+		key-volume-down {
+			label = "Volume Down";
+			linux,input-type = <EV_KEY>;
+			linux,code = <KEY_VOLUMEDOWN>;
+			gpios = <&gpio2 8 GPIO_ACTIVE_LOW>;
+		};
+	};
+
 	native-hdmi-connector {
 		compatible = "hdmi-connector";
 		label = "HDMI OUT";
