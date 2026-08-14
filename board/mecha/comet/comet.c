@@ -75,7 +75,7 @@ int board_early_init_r(void)
 int board_late_init(void)
 {
 	if (is_usb_boot()) {
-		env_set("bootcmd", "fastboot 0");
+		env_set("bootmenu_0", "Enable fastboot mode=run fastboot_cmd");
 		env_set("bootdelay", "0");
 	}
 	return 0;
